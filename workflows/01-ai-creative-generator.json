@@ -670,7 +670,7 @@
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
-            "Hook": "={{ $('New Content Row Trigger').item.json.Hook }}",
+            "Hook": "={{ $('Pick One Unprocessed Row').first().json.Hook }}",
             "status": "Posted"
           },
           "matchingColumns": [

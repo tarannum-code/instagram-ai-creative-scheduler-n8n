@@ -598,18 +598,22 @@
         "operation": "update",
         "documentId": {
           "__rl": true,
-          "mode": "id",
-          "value": "YOUR_CONTENT_CALENDAR_SHEET_ID"
+          "value": "YOUR_CONTENT_CALENDAR_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Content Calendar",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_CONTENT_CALENDAR_SHEET_ID/edit?usp=drivesdk"
         },
         "sheetName": {
           "__rl": true,
-          "mode": "name",
-          "value": "Content Calendar"
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_CONTENT_CALENDAR_SHEET_ID/edit#gid=0"
         },
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
-            "Post ID": "=={{ $('Reject Post').first().json.query.post_id }}",
+            "Post ID": "={{ $('Reject Post').first().json.query.post_id }}",
             "Buffer Status": "Rejected"
           },
           "matchingColumns": [
