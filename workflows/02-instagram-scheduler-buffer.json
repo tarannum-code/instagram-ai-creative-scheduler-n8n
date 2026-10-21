@@ -1,0 +1,892 @@
+{
+  "name": "Instagram scheduler(post,reel)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "d381ae87-b00a-4aae-83d4-99dd7db586b5",
+      "name": "Manual Test",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "59c4a281-10f1-4002-b85b-99962bb77317",
+              "name": "approver_email",
+              "value": "approver@example.com",
+              "type": "string"
+            },
+            {
+              "id": "2790dff2-085d-4a1a-bfe7-c3a4b26fa226",
+              "name": "n8n_base_url",
+              "value": "https://YOUR-N8N-DOMAIN",
+              "type": "string"
+            },
+            {
+              "id": "3de26c4a-33d6-45a9-86a9-2c9b55432b73",
+              "name": "timezone",
+              "value": "Asia/Kolkata",
+              "type": "string"
+            },
+            {
+              "id": "fixed-buffer-channel-id",
+              "name": "buffer_channel_id",
+              "value": "YOUR_BUFFER_CHANNEL_ID",
+              "type": "string"
+            },
+            {
+              "id": "fixed-buffer-channel-name",
+              "name": "buffer_channel_name",
+              "value": "your_instagram_handle",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "26e51c3a-ba7c-43ee-9679-c0c56f3fd1af",
+      "name": "Workflow Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_CONTENT_CALENDAR_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Content Calendar",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_CONTENT_CALENDAR_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_CONTENT_CALENDAR_SHEET_ID/edit#gid=0"
+        },
+        "options": {}
+      },
+      "id": "26aba29d-47c6-4fe7-b39b-2d30392c7cb7",
+      "name": "Read Content Calendar",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        240,
+        0
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "YOUR_GOOGLESHEETSOAUTH2API_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all();\nconst out = [];\n\nfor (const item of rows) {\n  const r = item.json || {};\n  const postId = String(r['Post ID'] || '').trim();\n  const driveUrl = String(r['Drive Image URL'] || '').trim();\n  const caption = String(r['Caption'] || '').trim();\n  const status = String(r['Buffer Status'] || '').trim().toLowerCase();\n\n  if (!postId || !driveUrl || !caption) continue;\n  if (['awaiting approval','scheduled','posted','rejected'].includes(status)) continue;\n\n  out.push({ json: r });\n}\n\nreturn out;"
+      },
+      "id": "50809358-5ae1-4b92-a697-33a794f55e14",
+      "name": "Pick Ready Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $json || {};\nconst cfg = $('Workflow Config').first().json || {};\n\nfunction driveFileId(url) {\n  const s = String(url || '');\n  const m1 = s.match(/\\/d\\/([a-zA-Z0-9_-]+)/);\n  if (m1) return m1[1];\n  const m2 = s.match(/[?&]id=([a-zA-Z0-9_-]+)/);\n  if (m2) return m2[1];\n  return '';\n}\n\nconst fileId = driveFileId(r['Drive Image URL']);\nif (!fileId) throw new Error('Could not extract Google Drive file ID from Drive Image URL.');\n\nconst caption = String(r['Caption'] || '').trim();\nif (!caption) throw new Error('Caption is empty.');\n\nconst postId = encodeURIComponent(String(r['Post ID'] || '').trim());\nconst baseUrl = String(cfg.n8n_base_url || '').replace(/\\/$/, '');\nif (!baseUrl || baseUrl.includes('YOUR-N8N-DOMAIN')) {\n  throw new Error('Set n8n_base_url in Workflow Config.');\n}\n\nreturn [{\n  json: {\n    ...r,\n    public_image_url: `https://drive.google.com/uc?export=download&id=${fileId}`,\n    approver_email: String(cfg.approver_email || '').trim(),\n    timezone: 'Asia/Kolkata',\n    approve_url: `${baseUrl}/webhook/social-post-approve?post_id=${postId}`,\n    reject_url: `${baseUrl}/webhook/social-post-reject?post_id=${postId}`\n  }\n}];"
+      },
+      "id": "9e4e0ee0-0c50-4d74-902f-0713def8b002",
+      "name": "Prepare Post",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_CONTENT_CALENDAR_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Content Calendar",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_CONTENT_CALENDAR_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_CONTENT_CALENDAR_SHEET_ID/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Post ID": "={{ $json['Post ID'] }}",
+            "Buffer Status": "Awaiting Approval"
+          },
+          "matchingColumns": [
+            "Post ID"
+          ],
+          "schema": [
+            {
+              "id": "Post ID",
+              "displayName": "Post ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Post Date",
+              "displayName": "Post Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Post Time",
+              "displayName": "Post Time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Drive Image URL",
+              "displayName": "Drive Image URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Topic",
+              "displayName": "Topic",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Caption",
+              "displayName": "Caption",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Buffer Status",
+              "displayName": "Buffer Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Buffer Post ID",
+              "displayName": "Buffer Post ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Scheduled At",
+              "displayName": "Scheduled At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Error",
+              "displayName": "Error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "50eeba36-14de-4b53-a6ea-a6c61646781d",
+      "name": "Mark Awaiting Approval",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        960,
+        0
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "YOUR_GOOGLESHEETSOAUTH2API_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Prepare Post').item.json.approver_email }}",
+        "subject": "=Approve Instagram Post — {{ $('Prepare Post').item.json['Post ID'] }}",
+        "message": "=<div style=\"font-family:Arial,sans-serif;max-width:650px\">\n<h2>Instagram post approval</h2>\n<p><strong>Post ID:</strong> {{ $('Prepare Post').item.json['Post ID'] }}</p>\n<p><strong>Scheduled:</strong> {{ $('Prepare Post').item.json['Post Date'] }} {{ $('Prepare Post').item.json['Post Time'] }} IST</p>\n<p><strong>Topic:</strong> {{ $('Prepare Post').item.json['Topic'] || '-' }}</p>\n<p><img src=\"{{ $('Prepare Post').item.json.public_image_url }}\" style=\"max-width:520px;width:100%;height:auto;border-radius:8px\"></p>\n<p><strong>Caption</strong></p>\n<p style=\"white-space:pre-wrap\">{{ $('Prepare Post').item.json['Caption'] }}</p>\n<p>\n<a href=\"{{ $('Prepare Post').item.json.approve_url }}\" style=\"display:inline-block;padding:12px 20px;background:#188038;color:#fff;text-decoration:none;border-radius:6px;margin-right:10px\">Approve</a>\n<a href=\"{{ $('Prepare Post').item.json.reject_url }}\" style=\"display:inline-block;padding:12px 20px;background:#d93025;color:#fff;text-decoration:none;border-radius:6px\">Reject</a>\n</p>\n</div>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "d3dea745-ffd6-4740-912b-ed48bebc303a",
+      "name": "Send Gmail Approval",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1200,
+        0
+      ],
+      "webhookId": "2f340136-61de-449c-810c-d1211d118e45",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "YOUR_GMAILOAUTH2_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "path": "social-post-approve",
+        "options": {}
+      },
+      "id": "39583fd2-8cb0-40b5-af3e-3a2a8af0f0b9",
+      "name": "Approve Post",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        448
+      ],
+      "webhookId": "b14d635c-66ff-4331-9cb8-fb4a99d38284"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_CONTENT_CALENDAR_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Content Calendar",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_CONTENT_CALENDAR_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_CONTENT_CALENDAR_SHEET_ID/edit#gid=0"
+        },
+        "options": {}
+      },
+      "id": "b6a4fe85-017a-40f6-84e5-b1d0499ea6d2",
+      "name": "Read Calendar For Approval",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        0,
+        448
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "YOUR_GOOGLESHEETSOAUTH2API_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const postId = String($('Approve Post').first().json.query?.post_id || '').trim();\nif (!postId) throw new Error('Missing post_id in approval URL.');\n\nconst rows = $input.all();\nconst match = rows.find(i => String(i.json['Post ID'] || '').trim() === postId);\nif (!match) throw new Error(`Post ID ${postId} was not found in the sheet.`);\n\nconst r = match.json;\nconst status = String(r['Buffer Status'] || '').trim().toLowerCase();\n\nif (status === 'scheduled' || status === 'posted') {\n  throw new Error(`Post ${postId} is already ${status}.`);\n}\n\nfunction driveFileId(url) {\n  const s = String(url || '');\n  const m1 = s.match(/\\/d\\/([a-zA-Z0-9_-]+)/);\n  if (m1) return m1[1];\n  const m2 = s.match(/[?&]id=([a-zA-Z0-9_-]+)/);\n  return m2 ? m2[1] : '';\n}\n\nconst fileId = driveFileId(r['Drive Image URL']);\nif (!fileId) throw new Error('Could not extract Drive file ID.');\n\nreturn [{\n  json: {\n    ...r,\n    timezone: 'Asia/Kolkata',\n    public_image_url: `https://drive.google.com/uc?export=download&id=${fileId}`\n  }\n}];"
+      },
+      "id": "bb166541-e8c0-4a52-9acd-ce0ce47a0c23",
+      "name": "Find Approved Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $json || {};\n\n// Fixed Buffer Instagram channel\nconst channelId = 'YOUR_BUFFER_CHANNEL_ID';\n\n// Caption\nconst caption = String(r['Caption'] || '').trim();\n\nif (!caption) {\n  throw new Error('Caption is empty.');\n}\n\n// Post type from sheet\nconst postType = String(r['Post Type'] || 'post')\n  .trim()\n  .toLowerCase();\n\nif (!['post', 'reel'].includes(postType)) {\n  throw new Error(\n    `Invalid Post Type: ${postType}. Use only \"post\" or \"reel\".`\n  );\n}\n\n// Date + time\nconst date = String(r['Post Date'] || '').trim();\nconst time = String(r['Post Time'] || '').trim();\n\nif (!date) {\n  throw new Error('Post Date is empty.');\n}\n\nif (!time) {\n  throw new Error('Post Time is empty.');\n}\n\n// Parse in India timezone\nlet dt = DateTime.fromFormat(\n  `${date} ${time}`,\n  'yyyy-MM-dd HH:mm',\n  { zone: 'Asia/Kolkata' }\n);\n\nif (!dt.isValid) {\n  dt = DateTime.fromFormat(\n    `${date} ${time}`,\n    'dd-MM-yyyy HH:mm',\n    { zone: 'Asia/Kolkata' }\n  );\n}\n\nif (!dt.isValid) {\n  dt = DateTime.fromFormat(\n    `${date} ${time}`,\n    'dd/MM/yyyy HH:mm',\n    { zone: 'Asia/Kolkata' }\n  );\n}\n\nif (!dt.isValid) {\n  throw new Error(\n    `Invalid Post Date/Post Time. Use YYYY-MM-DD and HH:mm. Received: ${date} ${time}`\n  );\n}\n\nconst dueAt = dt.toUTC().toISO();\n\n// Public Drive media URL\nconst mediaUrl = String(r.public_image_url || '').trim();\n\nif (!mediaUrl) {\n  throw new Error('Public media URL is missing.');\n}\n\n// -----------------------------------------------------\n// ASSET TYPE\n//\n// post -> image\n// reel -> video\n// -----------------------------------------------------\n\nlet assetBlock = '';\n\nif (postType === 'post') {\n  assetBlock = `\n    assets: [\n      {\n        image: {\n          url: ${JSON.stringify(mediaUrl)}\n        }\n      }\n    ]\n  `;\n}\n\nif (postType === 'reel') {\n  assetBlock = `\n    assets: [\n      {\n        video: {\n          url: ${JSON.stringify(mediaUrl)}\n        }\n      }\n    ]\n  `;\n}\n\n// -----------------------------------------------------\n// BUFFER GRAPHQL\n// -----------------------------------------------------\n\nconst q = `\nmutation CreateInstagramPost {\n  createPost(\n    input: {\n      text: ${JSON.stringify(caption)}\n\n      channelId: ${JSON.stringify(channelId)}\n\n      schedulingType: automatic\n\n      mode: customScheduled\n\n      dueAt: ${JSON.stringify(dueAt)}\n\n      ${assetBlock}\n\n      metadata: {\n        instagram: {\n          type: ${postType}\n          shouldShareToFeed: true\n        }\n      }\n    }\n  ) {\n    ... on PostActionSuccess {\n      post {\n        id\n        text\n        dueAt\n        status\n\n        assets {\n          id\n          mimeType\n        }\n      }\n    }\n\n    ... on MutationError {\n      message\n    }\n  }\n}`;\n\nreturn [\n  {\n    json: {\n      ...r,\n\n      buffer_channel_id: channelId,\n      buffer_channel_name: 'your_instagram_handle',\n\n      instagram_post_type: postType,\n\n      due_at: dueAt,\n\n      buffer_query: q\n    }\n  }\n];"
+      },
+      "id": "812e8bb6-b0ee-4407-89e3-c245a7aa6f73",
+      "name": "Build Buffer Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.buffer.com",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_BUFFER_API_TOKEN"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ query: $json.buffer_query }) }}",
+        "options": {}
+      },
+      "id": "24a3add8-4fee-4f35-a65e-ef1c6da5ca37",
+      "name": "Schedule in Buffer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const resp = $json || {};\nconst source = $('Build Buffer Request').item.json || {};\nconst result = resp.data?.createPost;\n\nif (!result) {\n  throw new Error('Buffer returned no createPost result: ' + JSON.stringify(resp).slice(0, 800));\n}\n\nif (result.message && !result.post) {\n  throw new Error('Buffer error: ' + result.message);\n}\n\nif (!result.post?.id) {\n  throw new Error('Buffer did not return a post ID: ' + JSON.stringify(resp).slice(0, 800));\n}\n\nreturn [{\n  json: {\n    ...source,\n    buffer_post_id: result.post.id,\n    buffer_due_at: result.post.dueAt || source.due_at,\n    buffer_status: result.post.status || 'scheduled'\n  }\n}];"
+      },
+      "id": "79a92b54-beee-47f0-b9db-eada13e1ec59",
+      "name": "Parse Buffer Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_CONTENT_CALENDAR_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Content Calendar",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_CONTENT_CALENDAR_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_CONTENT_CALENDAR_SHEET_ID/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Post ID": "={{ $json['Post ID'] }}",
+            "Buffer Status": "Scheduled",
+            "Buffer Post ID": "={{ $json.buffer_post_id }}",
+            "Scheduled At": "={{ $json.buffer_due_at }}"
+          },
+          "matchingColumns": [
+            "Post ID"
+          ],
+          "schema": [
+            {
+              "id": "Post ID",
+              "displayName": "Post ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Post Date",
+              "displayName": "Post Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Post Time",
+              "displayName": "Post Time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Drive Image URL",
+              "displayName": "Drive Image URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Topic",
+              "displayName": "Topic",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Caption",
+              "displayName": "Caption",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Buffer Status",
+              "displayName": "Buffer Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Buffer Post ID",
+              "displayName": "Buffer Post ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Scheduled At",
+              "displayName": "Scheduled At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Error",
+              "displayName": "Error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "4710ccc6-31a0-4ef3-88dc-e2ab2cd1f215",
+      "name": "Mark Scheduled",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1200,
+        448
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "YOUR_GOOGLESHEETSOAUTH2API_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "path": "social-post-reject",
+        "options": {}
+      },
+      "id": "2f326638-5b4a-42bb-b6ef-81bb63cf505d",
+      "name": "Reject Post",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        688
+      ],
+      "webhookId": "e3f80058-0719-4d60-8c93-2b75ddd56799"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_CONTENT_CALENDAR_SHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Content Calendar"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Post ID": "=={{ $('Reject Post').first().json.query.post_id }}",
+            "Buffer Status": "Rejected"
+          },
+          "matchingColumns": [
+            "Post ID"
+          ],
+          "schema": [
+            {
+              "id": "Post ID",
+              "displayName": "Post ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Post Date",
+              "displayName": "Post Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": true
+            },
+            {
+              "id": "Post Time",
+              "displayName": "Post Time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": true
+            },
+            {
+              "id": "Drive Image URL",
+              "displayName": "Drive Image URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": true
+            },
+            {
+              "id": "Topic",
+              "displayName": "Topic",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": true
+            },
+            {
+              "id": "Caption",
+              "displayName": "Caption",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": true
+            },
+            {
+              "id": "Buffer Status",
+              "displayName": "Buffer Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Buffer Post ID",
+              "displayName": "Buffer Post ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Scheduled At",
+              "displayName": "Scheduled At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Error",
+              "displayName": "Error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "8bd9e207-2e87-4360-b792-da67b09775fd",
+      "name": "Mark Rejected",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        0,
+        688
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "YOUR_GOOGLESHEETSOAUTH2API_CREDENTIAL"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Test": {
+      "main": [
+        [
+          {
+            "node": "Workflow Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Workflow Config": {
+      "main": [
+        [
+          {
+            "node": "Read Content Calendar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Content Calendar": {
+      "main": [
+        [
+          {
+            "node": "Pick Ready Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick Ready Rows": {
+      "main": [
+        [
+          {
+            "node": "Prepare Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Post": {
+      "main": [
+        [
+          {
+            "node": "Mark Awaiting Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Awaiting Approval": {
+      "main": [
+        [
+          {
+            "node": "Send Gmail Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approve Post": {
+      "main": [
+        [
+          {
+            "node": "Read Calendar For Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Calendar For Approval": {
+      "main": [
+        [
+          {
+            "node": "Find Approved Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Approved Row": {
+      "main": [
+        [
+          {
+            "node": "Build Buffer Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Buffer Request": {
+      "main": [
+        [
+          {
+            "node": "Schedule in Buffer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule in Buffer": {
+      "main": [
+        [
+          {
+            "node": "Parse Buffer Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Buffer Result": {
+      "main": [
+        [
+          {
+            "node": "Mark Scheduled",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reject Post": {
+      "main": [
+        [
+          {
+            "node": "Mark Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "nodeGroups": [],
+  "tags": []
+}

@@ -1,0 +1,1348 @@
+{
+  "name": "ASB BrandKit - Feedback Memory Agent - Final",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const rows = items.map(it => it.json);\n\n// Case-insensitive field lookup, so this keeps working even if a\n// column header's casing changes later (Status / status / STATUS, etc.)\nconst getField = (row, name) => {\n  const key = Object.keys(row).find(\n    k => k.trim().toLowerCase() === name.trim().toLowerCase()\n  );\n  return key !== undefined ? row[key] : undefined;\n};\n\n// Only rows where Status is empty (not yet processed)\nconst pending = rows.filter(r => {\n  const status = String(getField(r, 'Status') ?? '').trim();\n  return status === '';\n});\n\nif (!pending.length) {\n  // Nothing left to process this run - stop here quietly, no error.\n  return [];\n}\n\n// Process rows in Day order so nothing gets skipped\npending.sort((a, b) => {\n  const da = Number(getField(a, 'Day'));\n  const db = Number(getField(b, 'Day'));\n  if (Number.isFinite(da) && Number.isFinite(db)) return da - db;\n  return 0;\n});\n\n// Take exactly ONE row - this is what keeps the whole downstream\n// pipeline (which is built for a single post at a time) from\n// receiving multiple items in parallel and breaking the merges.\nreturn [{ json: pending[0] }];"
+      },
+      "id": "595707b7-e509-4960-9c35-2bf865aaacae",
+      "name": "Pick One Unprocessed Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1216,
+        688
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const j = $input.first().json || {};\n\nconst clean = (v, fallback = '') => {\n  const s = String(v ?? '').trim();\n  return s || fallback;\n};\n\n// --- Read the sheet row picked upstream ---\nconst day = j['Day'];\nconst contentAngle = clean(j['Content Angle'], 'Informational');\nconst hook = clean(j['Hook']);\nconst staticContent = clean(j['Static Post Content']);\nconst cta = clean(j['CTA'], 'Learn More');\nconst caption = clean(j['Caption']);\n\nif (day === undefined || day === null || String(day).trim() === '') {\n  throw new Error('The \"Day\" column is empty for this sheet row - it is needed to mark the row as posted later.');\n}\nif (!hook) {\n  throw new Error('The \"Hook\" column is empty for this sheet row.');\n}\nif (!staticContent) {\n  throw new Error('The \"Static Post Content\" column is empty for this sheet row.');\n}\n\n// Fixed brand colours (the colour-picker form has been removed, so these are locked defaults)\nconst primary = '#DC287F';\nconst secondary = '#0F254B';\nconst background = '#FFFFFF';\nconst text = '#000000';\n\nconst brandKit = `STUDY NURSING ABROAD — OFFICIAL BRAND GUIDELINES\n\nBRAND POSITIONING\nTagline: Global Opportunities. A Healthier Tomorrow.\nBrand words: Aspiring, Supportive, Global, Trustworthy, Empowering.\nBrand mood: Clean & Modern, Human-Centric, Positive & Aspirational, Global & Trustworthy, Simple & Clear, Supportive & Friendly.\n\nCOLOUR SYSTEM FOR THIS RUN\nPrimary: ${primary} — CTA, highlighted headline words, icons, key accents.\nSecondary: ${secondary} — headings, structural contrast, dividers, dark graphic areas.\nBackground: ${background} — principal canvas/background colour.\nText: ${text} — body/detail text.\nSupporting tones may be used sparingly when compatible: Light Pink #FADBE9, Soft Pink #FFF5FA, Neutral #E6E6E6, Text Grey #444444.\n\nTYPOGRAPHY\nUse Poppins throughout. Strong bold headline, semibold subheadings, clean regular body copy. Maintain strong hierarchy, good line breaks, and mobile legibility.\n\nCTA\nPrimary CTA is a fully rounded pill using the selected Primary colour with white bold text and a small chevron.\n\nICON STYLE\nSimple line icons using the selected Primary colour inside soft/light circular badges when supported by the chosen reference.\n\nVISUAL MOTIFS\nUse only when supported by the chosen reference composition: dashed flight path, faint world map, subtle dot grid, soft abstract circles, travel/global context. Do not force every motif into every post.\n\nPHOTOGRAPHY\nAuthentic, aspirational nurses or nursing students, natural expressions, professional appearance, realistic lighting. Use global/travel context only when relevant.\n\nLOGO RULE\nNever generate the Study Nursing Abroad logo or wordmark inside the AI-created image. Reserve a clean seamless top-left logo-safe area. The real logo is composited later. The reserved area must not look like a separate box, patch, panel, or placeholder.\n\nPARTNER LOGO RULE (BOTTOM-RIGHT)\nAlso reserve a clean seamless area in the bottom-right corner of the canvas for a small partner logo and a one-line disclaimer that are composited afterwards. That area must be the exact same background colour/treatment as the rest of the canvas — never a differently coloured box, panel, strip, or placeholder.\n\nREFERENCE RULE\nThe selected Google Drive reference image is the main COMPOSITION BLUEPRINT. Preserve its visual logic, density, image-to-text balance, hierarchy, approximate geometry, layering, spacing, decorative complexity, and editorial feel. Adapt content and colours to this brand. Do not copy the reference logo, brand identity, exact wording, phone number, URL, or proprietary artwork.`;\n\n// --- Build the exact on-image copy directly from the sheet row (no AI content invention) ---\nconst bulletLines = staticContent\n  .split(/\\r?\\n+/)\n  .map(s => s.trim())\n  .filter(Boolean)\n  .slice(0, 6);\n\nconst copyJson = {\n  headline: hook,\n  headline_highlight: '',\n  subheadline: '',\n  supporting_points: [],\n  event_details: [],\n  bullets: bulletLines,\n  cta_text: cta,\n  hero_concept: `${contentAngle} post for Indian nursing students built around the hook: \"${hook}\"`\n};\n\nreturn [{ json: {\n  topic: hook,\n  audience: 'Indian nursing students',\n  post_type: contentAngle,\n  special_details: staticContent,\n  cta_override: cta,\n  primary_color: primary,\n  secondary_color: secondary,\n  background_color: background,\n  text_color: text,\n  brand_kit: brandKit,\n  reference_folder_id: 'YOUR_REFERENCE_IMAGES_FOLDER_ID',\n  logos_folder_id: 'YOUR_LOGOS_FOLDER_ID',\n  output_folder_id: 'YOUR_OUTPUT_FOLDER_ID',\n  logo_margin_px: 48,\n  sheet_day: day,\n  sheet_content_angle: contentAngle,\n  sheet_hook: hook,\n  sheet_static_content: staticContent,\n  sheet_cta: cta,\n  sheet_caption: caption,\n  copy_json_text: JSON.stringify(copyJson)\n} }];"
+      },
+      "id": "d43df7b7-9e67-425a-ac54-e6ced7fc12b9",
+      "name": "Normalize Sheet Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -960,
+        688
+      ],
+      "jsCode": "const j = $input.first().json || {};\n\nconst clean = (v, fallback = '') => {\n  const s = String(v ?? '').trim();\n  return s || fallback;\n};\n\n// --- Read the sheet row picked upstream ---\nconst day = j['Day'];\nconst contentAngle = clean(j['Content Angle'], 'Informational');\nconst hook = clean(j['Hook']);\nconst staticContent = clean(j['Static Post Content']);\nconst cta = clean(j['CTA'], 'Learn More');\nconst caption = clean(j['Caption']);\n\nif (day === undefined || day === null || String(day).trim() === '') {\n  throw new Error('The \"Day\" column is empty for this sheet row - it is needed to mark the row as posted later.');\n}\nif (!hook) {\n  throw new Error('The \"Hook\" column is empty for this sheet row.');\n}\nif (!staticContent) {\n  throw new Error('The \"Static Post Content\" column is empty for this sheet row.');\n}\n\n// Fixed brand colours (the colour-picker form has been removed, so these are locked defaults)\nconst primary = '#DC287F';\nconst secondary = '#0F254B';\nconst background = '#FFFFFF';\nconst text = '#000000';\n\nconst brandKit = `STUDY NURSING ABROAD — OFFICIAL BRAND GUIDELINES\n\nBRAND POSITIONING\nTagline: Global Opportunities. A Healthier Tomorrow.\nBrand words: Aspiring, Supportive, Global, Trustworthy, Empowering.\nBrand mood: Clean & Modern, Human-Centric, Positive & Aspirational, Global & Trustworthy, Simple & Clear, Supportive & Friendly.\n\nCOLOUR SYSTEM FOR THIS RUN\nPrimary: ${primary} — CTA, highlighted headline words, icons, key accents.\nSecondary: ${secondary} — headings, structural contrast, dividers, dark graphic areas.\nBackground: ${background} — principal canvas/background colour.\nText: ${text} — body/detail text.\nSupporting tones may be used sparingly when compatible: Light Pink #FADBE9, Soft Pink #FFF5FA, Neutral #E6E6E6, Text Grey #444444.\n\nTYPOGRAPHY\nUse Poppins throughout. Strong bold headline, semibold subheadings, clean regular body copy. Maintain strong hierarchy, good line breaks, and mobile legibility.\n\nCTA\nPrimary CTA is a fully rounded pill using the selected Primary colour with white bold text and a small chevron.\n\nICON STYLE\nSimple line icons using the selected Primary colour inside soft/light circular badges when supported by the chosen reference.\n\nVISUAL MOTIFS\nUse only when supported by the chosen reference composition: dashed flight path, faint world map, subtle dot grid, soft abstract circles, travel/global context. Do not force every motif into every post.\n\nPHOTOGRAPHY\nAuthentic, aspirational nurses or nursing students, natural expressions, professional appearance, realistic lighting. Use global/travel context only when relevant.\n\nLOGO RULE\nNever generate the Study Nursing Abroad logo or wordmark inside the AI-created image. Reserve a clean seamless top-left logo-safe area. The real logo is composited later. The reserved area must not look like a separate box, patch, panel, or placeholder.\n\nPARTNER LOGO RULE (BOTTOM-RIGHT)\nAlso reserve a clean seamless area in the bottom-right corner of the canvas for a small partner logo and a one-line disclaimer that are composited afterwards. That area must be the exact same background colour/treatment as the rest of the canvas — never a differently coloured box, panel, strip, or placeholder.\n\nREFERENCE RULE\nThe selected Google Drive reference image is the main COMPOSITION BLUEPRINT. Preserve its visual logic, density, image-to-text balance, hierarchy, approximate geometry, layering, spacing, decorative complexity, and editorial feel. Adapt content and colours to this brand. Do not copy the reference logo, brand identity, exact wording, phone number, URL, or proprietary artwork.`;\n\n// --- Build the exact on-image copy directly from the sheet row (no AI content invention) ---\nconst bulletLines = staticContent\n  .split(/\\r?\\n+/)\n  .map(s => s.trim())\n  .filter(Boolean)\n  .slice(0, 6);\n\nconst copyJson = {\n  headline: hook,\n  headline_highlight: '',\n  subheadline: '',\n  supporting_points: [],\n  event_details: [],\n  bullets: bulletLines,\n  cta_text: cta,\n  hero_concept: `${contentAngle} post for Indian nursing students built around the hook: \"${hook}\"`\n};\n\nreturn [{ json: {\n  topic: hook,\n  audience: 'Indian nursing students',\n  post_type: contentAngle,\n  special_details: staticContent,\n  cta_override: cta,\n  primary_color: primary,\n  secondary_color: secondary,\n  background_color: background,\n  text_color: text,\n  brand_kit: brandKit,\n  reference_folder_id: 'YOUR_REFERENCE_IMAGES_FOLDER_ID',\n  logos_folder_id: 'YOUR_LOGOS_FOLDER_ID',\n  output_folder_id: 'YOUR_OUTPUT_FOLDER_ID',\n  logo_margin_px: 48,\n  sheet_day: day,\n  sheet_content_angle: contentAngle,\n  sheet_hook: hook,\n  sheet_static_content: staticContent,\n  sheet_cta: cta,\n  sheet_caption: caption,\n  copy_json_text: JSON.stringify(copyJson)\n} }];"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst j = item.json || {};\n\nfunction extractText(obj) {\n  if (!obj || typeof obj !== 'object') return '';\n\n  if (Array.isArray(obj.output)) {\n    for (const out of obj.output) {\n      if (out && Array.isArray(out.content)) {\n        for (const p of out.content) {\n          if (p && typeof p.text === 'string' && p.text.trim()) {\n            return p.text.trim();\n          }\n        }\n      }\n    }\n  }\n\n  if (obj[\"0\"] && Array.isArray(obj[\"0\"].content)) {\n    for (const p of obj[\"0\"].content) {\n      if (p && typeof p.text === 'string' && p.text.trim()) {\n        return p.text.trim();\n      }\n    }\n  }\n\n  if (Array.isArray(obj.content)) {\n    for (const p of obj.content) {\n      if (p && typeof p.text === 'string' && p.text.trim()) {\n        return p.text.trim();\n      }\n    }\n  }\n\n  if (typeof obj.text === 'string' && obj.text.trim()) {\n    return obj.text.trim();\n  }\n\n  return '';\n}\n\nlet raw = extractText(j)\n  .replace(/^```(?:json)?\\s*/i, '')\n  .replace(/\\s*```$/i, '')\n  .trim();\n\nlet selected = null;\n\n// First try normal JSON\ntry {\n  selected = JSON.parse(raw);\n} catch (e) {\n  // Fallback for incomplete/truncated OpenAI output\n  const idMatch = raw.match(\n    /\"selected_reference_id\"\\s*:\\s*\"([^\"]+)\"/\n  );\n\n  const nameMatch = raw.match(\n    /\"selected_reference_name\"\\s*:\\s*\"([^\"]*)\"/\n  );\n\n  const reasonMatch = raw.match(\n    /\"selection_reason\"\\s*:\\s*\"([^\"]*)\"/\n  );\n\n  if (!idMatch) {\n    throw new Error(\n      'Could not find selected_reference_id in Select Best Reference output. Raw output: ' +\n      raw.slice(0, 500)\n    );\n  }\n\n  selected = {\n    selected_reference_id: idMatch[1],\n    selected_reference_name: nameMatch ? nameMatch[1] : '',\n    selection_reason: reasonMatch ? reasonMatch[1] : ''\n  };\n}\n\nif (!selected.selected_reference_id) {\n  throw new Error(\n    'Selected reference ID is missing from Select Best Reference output.'\n  );\n}\n\nif (!j.copy_json_text) {\n  throw new Error(\n    'copy_json_text is missing. Check Normalize Sheet Row.'\n  );\n}\n\n// Find the chosen reference directly from reference_library\nconst referenceLibrary = Array.isArray(j.reference_library)\n  ? j.reference_library\n  : [];\n\nconst chosenReference = referenceLibrary.find(\n  ref => String(ref.id) === String(selected.selected_reference_id)\n);\n\nif (!chosenReference) {\n  throw new Error(\n    'Selected reference ID ' +\n    selected.selected_reference_id +\n    ' was not found in reference_library.'\n  );\n}\n\nreturn [{\n  json: {\n    ...j,\n\n    selected_reference_id:\n      selected.selected_reference_id,\n\n    selected_reference_name:\n      selected.selected_reference_name ||\n      chosenReference.name ||\n      '',\n\n    selection_reason:\n      selected.selection_reason || '',\n\n    // IMPORTANT:\n    // Take the complete analysis from reference_library,\n    // NOT from the truncated AI output.\n    selected_reference_analysis:\n      chosenReference.analysis || '',\n\n    copy_json_text:\n      j.copy_json_text\n  }\n}];"
+      },
+      "id": "28f2d0ab-6f89-4458-8577-00e26a550fde",
+      "name": "Parse Selection + Attach Sheet Copy",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        688
+      ],
+      "jsCode": "const item = $input.first();\nconst j = item.json || {};\n\nfunction extractText(obj) {\n  if (!obj || typeof obj !== 'object') return '';\n  if (Array.isArray(obj.output)) {\n    for (const out of obj.output) {\n      if (out && Array.isArray(out.content)) {\n        for (const p of out.content) {\n          if (p && typeof p.text === 'string' && p.text.trim()) return p.text.trim();\n        }\n      }\n    }\n  }\n  if (obj[\"0\"] && Array.isArray(obj[\"0\"].content)) {\n    for (const p of obj[\"0\"].content) {\n      if (p && typeof p.text === 'string' && p.text.trim()) return p.text.trim();\n    }\n  }\n  if (Array.isArray(obj.content)) {\n    for (const p of obj.content) {\n      if (p && typeof p.text === 'string' && p.text.trim()) return p.text.trim();\n    }\n  }\n  if (typeof obj.text === 'string' && obj.text.trim()) return obj.text.trim();\n  return '';\n}\n\nlet raw = extractText(j)\n  .replace(/^```(?:json)?\\s*/i, '')\n  .replace(/\\s*```$/i, '')\n  .trim();\n\nlet selected;\ntry {\n  selected = JSON.parse(raw);\n} catch (e) {\n  throw new Error('Could not parse Select Best Reference output as JSON. Raw output: ' + raw.slice(0, 500));\n}\n\nif (!selected.selected_reference_id) {\n  throw new Error('Selected reference ID is missing from Select Best Reference output.');\n}\n\nif (!j.copy_json_text) {\n  throw new Error('copy_json_text (built from the Google Sheet row) is missing. Check Normalize Sheet Row.');\n}\n\nreturn [{\n  json: {\n    ...j,\n    selected_reference_id: selected.selected_reference_id,\n    selected_reference_name: selected.selected_reference_name || '',\n    selected_reference_analysis: selected.selected_reference_analysis || '',\n    copy_json_text: j.copy_json_text\n  }\n}];"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "2805840b-5170-4ce5-bb75-f026b13b0add",
+      "name": "Merge Generated Image + Sheet Context",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        3760,
+        672
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "returnAll": true,
+        "filter": {
+          "folderId": {
+            "__rl": true,
+            "value": "YOUR_REFERENCE_IMAGES_FOLDER_ID",
+            "mode": "id"
+          },
+          "whatToSearch": "files"
+        },
+        "options": {}
+      },
+      "id": "827e7ebb-07fb-4bb8-9d3b-badffc3bdf65",
+      "name": "List Reference Folder3",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -704,
+        528
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "",
+          "name": "YOUR_GOOGLEDRIVEOAUTH2API_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const imageItems = items\n  .filter(item => {\n    const mime = String(item.json?.mimeType || '').toLowerCase();\n    const name = String(item.json?.name || '').toLowerCase();\n    return mime.startsWith('image/') ||\n      /\\.(png|jpe?g|webp)$/i.test(name);\n  })\n  .slice(0, 8);\n\nif (!imageItems.length) {\n  throw new Error('No PNG/JPG/JPEG/WEBP reference images were found in the fixed Google Drive folder.');\n}\n\nreturn imageItems.map(item => ({\n  json: {\n    id: item.json.id,\n    name: item.json.name || '',\n    mimeType: item.json.mimeType || ''\n  }\n}));"
+      },
+      "id": "e9bef449-2fcf-4d74-95b1-7a639829cd7c",
+      "name": "Filter Reference Images3",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -448,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "7dc59077-8a42-4a9e-9f56-abd65cfabf90",
+      "name": "Merge Reference Metadata + File3",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        80,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "operation": "analyze",
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1",
+          "cachedResultName": "gpt-4.1"
+        },
+        "text": "=Analyze this reference social-media post as a senior art director.\n\nYour goal is NOT to describe the image generally.\nYour goal is to extract the exact COMPOSITION DNA so another image model can recreate the same layout logic with new branding and new copy.\n\nReturn a highly specific analysis covering:\n\n1. COMPOSITION TYPE\n- event poster / editorial split / hero-centered / block-based / grid / asymmetrical / minimal\n- describe the overall design system in one sentence\n\n2. HERO SUBJECT\n- exact approximate x%, y%, width%, height%\n- how much of the canvas the subject occupies\n- crop type\n- direction the subject faces\n- whether the subject overlaps text, shapes, footer, or background graphics\n\n3. HEADLINE BLOCK\n- exact approximate x%, y%, width%, height%\n- number of lines\n- alignment\n- relative scale\n- highlighted words\n- whether headline is tightly grouped or widely spaced\n\n4. SUPPORTING TEXT\n- location and size\n- number of supporting lines\n- relation to headline\n\n5. STRUCTURAL ELEMENTS\nDescribe exact approximate number and placement of:\n- chips\n- labels\n- rectangles\n- cards\n- footer strips\n- dividers\n- icon modules\n- text blocks\n- badges\n\n6. DECORATIVE ELEMENTS\nDescribe approximate number and placement of:\n- dots\n- maps\n- abstract shapes\n- curved paths\n- geometric blocks\n- accent strokes\n- background patterns\n\n7. FOOTER / EVENT DETAILS\n- exact structure\n- how many columns/modules\n- relative widths\n- position\n- whether separated by lines or blocks\n\n8. CTA\n- approximate x%, y%, width%, height%\n- shape\n- visual weight\n- relation to footer\n\n9. VISUAL DENSITY\n- sparse / medium / rich\n- approximate whitespace percentage\n- how tightly elements are packed\n\n10. IMAGE-TO-TEXT BALANCE\n- approximate % photography\n- approximate % typography\n- approximate % graphics\n\n11. LAYERING\nDescribe what sits:\n- in background\n- middle layer\n- foreground\n- what overlaps what\n\n12. POSTER ENERGY\nDescribe how bold, dramatic, graphic, editorial, structured, or minimal the design feels.\n\n13. MUST PRESERVE\nList the 8–12 most important layout rules that must remain in the generated version.\n\n14. MUST NOT COPY\nDo not copy:\n- logo\n- brand name\n- exact wording\n- phone number\n- URL\n- proprietary artwork\n\nIMPORTANT:\nDo NOT summarize this reference as:\n\"headline top, image center, details bottom.\"\n\nCapture exact composition logic, proportions, visual tension, subject dominance, information density, shape language, block system, and poster structure.",
+        "inputType": "base64",
+        "options": {
+          "detail": "high",
+          "maxTokens": 1400
+        }
+      },
+      "id": "0a5404d3-02fd-4bbc-8c7b-82c6581a1398",
+      "name": "Analyze Each Reference3",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        336,
+        480
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "",
+          "name": "YOUR_OPENAIAPI_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "7fba4f6f-4277-4252-b392-f0f25cb5cd1e",
+      "name": "Merge Reference + Analysis3",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        592,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "function extractText(obj) {\n  if (!obj || typeof obj !== 'object') return '';\n\n  if (obj[\"0\"] && Array.isArray(obj[\"0\"].content)) {\n    for (const p of obj[\"0\"].content) {\n      if (p && typeof p.text === 'string' && p.text.trim()) return p.text.trim();\n    }\n  }\n\n  if (Array.isArray(obj.content)) {\n    for (const p of obj.content) {\n      if (p && typeof p.text === 'string' && p.text.trim()) return p.text.trim();\n    }\n  }\n\n  if (typeof obj.text === 'string' && obj.text.trim()) return obj.text.trim();\n\n  if (Array.isArray(obj.output)) {\n    for (const out of obj.output) {\n      if (out && Array.isArray(out.content)) {\n        for (const p of out.content) {\n          if (p && typeof p.text === 'string' && p.text.trim()) return p.text.trim();\n        }\n      }\n      if (out && typeof out.text === 'string' && out.text.trim()) return out.text.trim();\n    }\n  }\n\n  for (const value of Object.values(obj)) {\n    if (value && typeof value === 'object') {\n      const found = extractText(value);\n      if (found) return found;\n    }\n  }\n  return '';\n}\n\nconst refs = items.map((item, index) => ({\n  index: index + 1,\n  id: item.json.id || '',\n  name: item.json.name || `Reference ${index + 1}`,\n  analysis: extractText(item.json)\n})).filter(x => x.id && x.analysis);\n\nif (!refs.length) {\n  throw new Error('Reference images were downloaded, but no usable analysis was produced.');\n}\n\nreturn [{\n  json: {\n    reference_library: refs\n  }\n}];"
+      },
+      "id": "d0200f71-edb2-412a-8b55-b17c9758bb46",
+      "name": "Build Reference Library3",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        848,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "eb186138-311b-44e1-931f-b212a4925c12",
+      "name": "Merge Form + Reference Library3",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        1120,
+        688
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst j = item.json || {};\nconst refs = Array.isArray(j.reference_library) ? j.reference_library : [];\n\nif (!refs.length) {\n  throw new Error('Reference library is empty.');\n}\n\nconst libraryText = refs.map(r =>\n  `REFERENCE ${r.index}\nID: ${r.id}\nNAME: ${r.name}\nANALYSIS:\n${r.analysis}`\n).join('\\n\\n--------------------\\n\\n');\n\nconst prompt = `Select the SINGLE best reference composition for this Study Nursing Abroad post.\n\nPOST\nTopic: ${j.topic}\nAudience: ${j.audience}\nPost Type: ${j.post_type}\nSpecial Details: ${j.special_details || '[none]'}\n\nSELECTION CRITERIA\n- Choose based on composition suitability, not filename.\n- Match the post's information density to the reference.\n- Event posts should prefer references with strong date/time/venue/event hierarchy.\n- Informational/educational posts should prefer references with suitable structured information areas.\n- Promotional posts should prefer references with strong hero + CTA treatment.\n- Career/admission posts should prefer references whose visual hierarchy fits the topic.\n- Prefer a visually rich, polished reference when the content can support it.\n- Do not choose a sparse reference merely because it is easier.\n\nREFERENCE LIBRARY\n${libraryText}\n\nReturn ONLY valid JSON:\n{\n  \"selected_reference_id\": \"<exact Drive file ID>\",\n  \"selected_reference_name\": \"<exact filename>\",\n  \"selection_reason\": \"<short reason>\",\n  \"selected_reference_analysis\": \"<copy the key composition rules from the chosen reference analysis>\"\n}`;\n\nreturn [{\n  json: {\n    ...j,\n    select_reference_prompt: prompt\n  }\n}];"
+      },
+      "id": "8f8afb0e-8c7c-4193-bfa5-6b1d16a13064",
+      "name": "Prepare Reference Selection3",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1376,
+        688
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini",
+          "cachedResultName": "gpt-4.1-mini"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "=Select the SINGLE best reference for the requested post.\n\nChoose based primarily on COMPOSITION SUITABILITY, not filename and not general visual attractiveness.\n\nPOST DATA\nTopic: {{ $json.topic }}\nAudience: {{ $json.audience }}\nPost Type: {{ $json.post_type }}\nSpecial Details: {{ $json.special_details || '[none]' }}\n\nREFERENCE LIBRARY\n{{ $json.select_reference_prompt }}\n\nSELECTION RULES\n\nFor Event posts:\n- prefer strong event-poster compositions\n- prefer bold information hierarchy\n- prefer clear date/time/venue/footer zones\n- prefer dominant hero subject + structured text system\n\nFor Promotional posts:\n- prefer strong hero + CTA structure\n- prefer visually bold layouts\n\nFor Educational / Informational:\n- prefer structured information areas\n- prefer clear headline + supporting modules\n\nFor Career / Admission:\n- prefer aspirational hero-led compositions\n\nVery important:\nDo NOT automatically choose the simplest reference.\nPrefer the reference whose visual system best supports the amount and type of information.\n\nReturn ONLY valid JSON:\n\n{\n  \"selected_reference_id\": \"<exact Drive file ID>\",\n  \"selected_reference_name\": \"<exact filename>\",\n  \"selection_reason\": \"<brief reason>\",\n  \"selected_reference_analysis\": \"<detailed composition rules of chosen reference>\"\n}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "maxTokens": 1000
+        }
+      },
+      "id": "d4d61e6a-3ae3-4a84-86de-d5e05b5ed601",
+      "name": "Select Best Reference3",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        1632,
+        528
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "",
+          "name": "YOUR_OPENAIAPI_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "aca782be-7356-4d41-a5bf-92c609b6be9d",
+      "name": "Merge Context + Selected Reference3",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        1984,
+        688
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst j = item.json || {};\n\nlet copyText = String(j.copy_json_text || '').trim();\n\nif (!copyText) {\n  throw new Error('Generated copy (copy_json_text) could not be found.');\n}\n\nconst editPrompt = `IMAGE-TO-IMAGE REFERENCE-FITTED DESIGN TASK\n\nUse the PROVIDED SELECTED REFERENCE IMAGE as the PRIMARY COMPOSITION BLUEPRINT.\n\nThis is NOT:\n- a loose inspiration task\n- a generic branded redesign\n- a clean social-media template\n- a fresh layout created from scratch\n\nThis IS:\n- a close composition adaptation\n- a layout-preservation task\n- a reference-fitted poster\n- a structural recreation using new branding and new content\n\nMAIN GOAL\n\nCreate a polished Study Nursing Abroad social-media post that visibly preserves the selected reference's COMPOSITION DNA.\n\nThe final result should clearly reflect:\n- the same layout family\n- similar subject dominance\n- similar headline placement\n- similar structural zones\n- similar content density\n- similar layering\n- similar visual tension\n- similar poster energy\n\nPOST CONTEXT\nTopic: ${j.topic || ''}\nAudience: ${j.audience || ''}\nPost Type: ${j.post_type || ''}\nSpecial Details: ${j.special_details || '[none]'}\n\nCOLOUR SYSTEM\nPrimary: ${j.primary_color || '#DC287F'}\nSecondary: ${j.secondary_color || '#0F254B'}\nBackground: ${j.background_color || '#FFFFFF'}\nText: ${j.text_color || '#000000'}\n\nBRAND GUIDELINES\n${j.brand_kit || ''}\n\nSELECTED REFERENCE\nName: ${j.selected_reference_name || ''}\n\nREFERENCE COMPOSITION\n${j.selected_reference_analysis || ''}\n\nEXACT NEW COPY\n${copyText}\n\nREFERENCE PRESERVATION RULES\n\n1. HERO SUBJECT\nPreserve the reference's:\n- approximate subject position\n- scale\n- crop\n- dominance\n- orientation\n- overlap behaviour\n- relationship with surrounding content\n\nIf the reference uses one dominant portrait occupying a large percentage of the canvas, do the same.\n\n2. HEADLINE BLOCK\nPreserve:\n- approximate x/y position\n- width\n- number of headline lines\n- alignment\n- line grouping\n- headline-to-subheadline relationship\n- visual weight\n\nDo not move the headline into a generic safe position if the reference uses a stronger asymmetrical placement.\n\n3. STRUCTURAL LAYOUT\nPreserve the reference's:\n- main sections\n- footer structure\n- information bars\n- columns\n- chips\n- labels\n- blocks\n- dividers\n- badges\n- icon groups\n- supporting text zones\n\nUse approximately the same number of structural zones as the reference.\n\n4. VISUAL DENSITY\nMatch the reference's visual density closely.\n\nIf the reference is:\n- rich\n- bold\n- layered\n- tightly composed\n- graphic-heavy\n\nthe generated design must also feel:\n- rich\n- bold\n- layered\n- tightly composed\n- graphic-heavy\n\nDo NOT simplify it into a minimal or generic layout.\n\n5. STRUCTURAL SHAPES\nPreserve the same general shape language and approximate quantity of:\n- rectangles\n- panels\n- colour blocks\n- strips\n- geometric accents\n- dividers\n- labels\n- icon containers\n- graphic modules\n\nDo not replace strong geometric structure with only soft circles and generic decorations.\n\n6. LAYERING\nPreserve:\n- foreground/background relationships\n- subject overlap\n- graphic elements behind the subject\n- text positioned beside or over supporting shapes\n- footer overlapping or anchoring the bottom area where applicable\n\n7. NEGATIVE SPACE\nMatch the reference's whitespace balance.\n\nDo not automatically create large empty areas merely for cleanliness.\n\n8. POSTER ENERGY\nPreserve the reference's emotional design character.\n\nIf it feels:\n- bold\n- editorial\n- event-focused\n- dramatic\n- graphic\n- high-impact\n- asymmetric\n\nthe generated result must keep that same energy.\n\n9. BRAND COLOUR ADAPTATION\nApply the Study Nursing Abroad colour system to the existing reference structure.\n\nUse:\nPrimary ${j.primary_color || '#DC287F'} for:\n- key highlights\n- CTA\n- accent blocks\n- important icons\n\nSecondary ${j.secondary_color || '#0F254B'} for:\n- strong heading areas\n- structural contrast\n- dark blocks\n- emphasis\n\nBackground ${j.background_color || '#FFFFFF'} for the main canvas where appropriate.\n\nText ${j.text_color || '#000000'} for normal readable copy.\n\nDo NOT completely redesign the reference just to make the colours fit.\n\n10. BACKGROUND & DECORATIVE ELEMENTS\nKeep the background clean and calm. Use only elements that directly relate to this post's topic and copy (for example: the supplied flags, nursing icons, checkmarks, or the hero subject).\n\nDo NOT include any of the following, even if they appear in the selected reference:\nworld map or map outlines\nairplane or dotted flight paths\ndotted or dashed travel lines\nlocation pins or map markers\nglobe icons\ntravel landmarks or city skylines\nscattered dot patterns\n\nIf the reference contains any of these, replace that area with plain background colour or a very light, simple abstract shape in the brand colours.\n\n11. TYPOGRAPHY\nUse a strong professional poster hierarchy.\n\nHeadline should feel:\n- bold\n- compact\n- deliberate\n- visually dominant\n\nUse tighter grouping where the reference uses tight typography.\n\nAvoid:\n- overly soft hierarchy\n- excessive line spacing\n- weak headline scale\n- generic centered social-media typography\n\n12. COPY\nUse ONLY the supplied generated copy.\n\nDo not invent:\n- statistics\n- percentages\n- countries\n- dates\n- times\n- venues\n- salaries\n- rankings\n- claims\n- phone numbers\n- labels not present in the supplied copy\n\n13. TOP-LEFT LOGO-SAFE AREA\nDo NOT generate:\n- Study Nursing Abroad logo\n- Jusst Nursing logo\n- any brand wordmark\n\nLeave a seamless clean top-left logo-safe area for later compositing.\n\nThe logo-safe area must NOT look like:\n- a rectangle\n- placeholder\n- patch\n- card\n- separate panel\n- different-colour box\n\n13B. BOTTOM-RIGHT PARTNER-LOGO-SAFE AREA (MUST MATCH BACKGROUND)\nIn addition to the top-left logo-safe area, also reserve a second seamless area in the BOTTOM-RIGHT corner of the canvas (roughly the last third of the width and the last tenth of the height) for a small partner logo and a one-line grey disclaimer that will be composited afterwards.\n\nThis bottom-right area must:\n- Be rendered in the exact same background colour/treatment (${j.background_color || '#FFFFFF'}) as the rest of the canvas background in that region — never a different shade, tint, gradient, or colour block\n- NOT look like a rectangle, placeholder, patch, card, footer bar, or separate panel of any kind\n- Blend seamlessly with whatever naturally occupies that corner (plain background, or a very light continuation of the existing background pattern), exactly as if nothing were reserved there\n- Stay visually calm and low-contrast in that specific corner (avoid dark shapes, bold graphics, or busy patterns there) so the small logo and grey disclaimer text remain legible once composited on top\n- Not duplicate or conflict with the top-left logo-safe area — these are two separate reserved zones, both seamless with the background, one top-left and one bottom-right\n\n14. PHOTOGRAPHY\nWhere the reference uses photography:\n- use authentic professional nurses or nursing students\n- keep the reference's subject scale and crop logic\n- maintain realistic lighting\n- avoid generic stock-photo posing\n- preserve the reference's portrait dominance and placement\n\n15. QUALITY CONTROL\nBefore finalizing, check:\n\n- Does the composition visibly resemble the selected reference?\n- Is the hero subject in a similar relative position?\n- Is the headline positioned similarly?\n- Is the footer/detail area structurally similar?\n- Is the visual density comparable?\n- Are the same categories of graphic elements present?\n- Has the reference's poster energy been preserved?\n- Has unnecessary brand decoration been avoided?\n- Do BOTH reserved logo areas (top-left and bottom-right) blend seamlessly with the background, with no visible box, patch, or colour break?\n\nIf not, revise the composition to fit the selected reference more closely.\n\nFINAL OUTPUT\n\nCreate one polished portrait social-media poster.\n\nThe result must feel like:\nTHE SELECTED REFERENCE COMPOSITION\n+\nSTUDY NURSING ABROAD BRANDING\n+\nNEW SUPPLIED COPY\n\nIt must NOT feel like a generic pre-made social media template.`;\n\nreturn [{\n  json: {\n    ...j,\n    copy_json_text: copyText,\n    edit_prompt: editPrompt\n  }\n}];"
+      },
+      "id": "439ca9e0-b745-432b-ae25-87cb25fd1d18",
+      "name": "Build Edit Prompt3",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2448,
+        688
+      ],
+      "jsCode": "const item = $input.first();\nconst j = item.json || {};\n\nlet copyText = String(j.copy_json_text || '').trim();\n\nif (!copyText) {\n  throw new Error('Generated copy (copy_json_text) could not be found.');\n}\n\nconst editPrompt = `IMAGE-TO-IMAGE REFERENCE-FITTED DESIGN TASK\n\nUse the PROVIDED SELECTED REFERENCE IMAGE as the PRIMARY COMPOSITION BLUEPRINT.\n\nThis is NOT:\n- a loose inspiration task\n- a generic branded redesign\n- a clean social-media template\n- a fresh layout created from scratch\n\nThis IS:\n- a close composition adaptation\n- a layout-preservation task\n- a reference-fitted poster\n- a structural recreation using new branding and new content\n\nMAIN GOAL\n\nCreate a polished Study Nursing Abroad social-media post that visibly preserves the selected reference's COMPOSITION DNA.\n\nThe final result should clearly reflect:\n- the same layout family\n- similar subject dominance\n- similar headline placement\n- similar structural zones\n- similar content density\n- similar layering\n- similar visual tension\n- similar poster energy\n\nPOST CONTEXT\nTopic: ${j.topic || ''}\nAudience: ${j.audience || ''}\nPost Type: ${j.post_type || ''}\nSpecial Details: ${j.special_details || '[none]'}\n\nCOLOUR SYSTEM\nPrimary: ${j.primary_color || '#DC287F'}\nSecondary: ${j.secondary_color || '#0F254B'}\nBackground: ${j.background_color || '#FFFFFF'}\nText: ${j.text_color || '#000000'}\n\nBRAND GUIDELINES\n${j.brand_kit || ''}\n\nSELECTED REFERENCE\nName: ${j.selected_reference_name || ''}\n\nREFERENCE COMPOSITION\n${j.selected_reference_analysis || ''}\n\nEXACT NEW COPY\n${copyText}\n\nREFERENCE PRESERVATION RULES\n\n1. HERO SUBJECT\nPreserve the reference's:\n- approximate subject position\n- scale\n- crop\n- dominance\n- orientation\n- overlap behaviour\n- relationship with surrounding content\n\nIf the reference uses one dominant portrait occupying a large percentage of the canvas, do the same.\n\n2. HEADLINE BLOCK\nPreserve:\n- approximate x/y position\n- width\n- number of headline lines\n- alignment\n- line grouping\n- headline-to-subheadline relationship\n- visual weight\n\nDo not move the headline into a generic safe position if the reference uses a stronger asymmetrical placement.\n\n3. STRUCTURAL LAYOUT\nPreserve the reference's:\n- main sections\n- footer structure\n- information bars\n- columns\n- chips\n- labels\n- blocks\n- dividers\n- badges\n- icon groups\n- supporting text zones\n\nUse approximately the same number of structural zones as the reference.\n\n4. VISUAL DENSITY\nMatch the reference's visual density closely.\n\nIf the reference is:\n- rich\n- bold\n- layered\n- tightly composed\n- graphic-heavy\n\nthe generated design must also feel:\n- rich\n- bold\n- layered\n- tightly composed\n- graphic-heavy\n\nDo NOT simplify it into a minimal or generic layout.\n\n5. STRUCTURAL SHAPES\nPreserve the same general shape language and approximate quantity of:\n- rectangles\n- panels\n- colour blocks\n- strips\n- geometric accents\n- dividers\n- labels\n- icon containers\n- graphic modules\n\nDo not replace strong geometric structure with only soft circles and generic decorations.\n\n6. LAYERING\nPreserve:\n- foreground/background relationships\n- subject overlap\n- graphic elements behind the subject\n- text positioned beside or over supporting shapes\n- footer overlapping or anchoring the bottom area where applicable\n\n7. NEGATIVE SPACE\nMatch the reference's whitespace balance.\n\nDo not automatically create large empty areas merely for cleanliness.\n\n8. POSTER ENERGY\nPreserve the reference's emotional design character.\n\nIf it feels:\n- bold\n- editorial\n- event-focused\n- dramatic\n- graphic\n- high-impact\n- asymmetric\n\nthe generated result must keep that same energy.\n\n9. BRAND COLOUR ADAPTATION\nApply the Study Nursing Abroad colour system to the existing reference structure.\n\nUse:\nPrimary ${j.primary_color || '#DC287F'} for:\n- key highlights\n- CTA\n- accent blocks\n- important icons\n\nSecondary ${j.secondary_color || '#0F254B'} for:\n- strong heading areas\n- structural contrast\n- dark blocks\n- emphasis\n\nBackground ${j.background_color || '#FFFFFF'} for the main canvas where appropriate.\n\nText ${j.text_color || '#000000'} for normal readable copy.\n\nDo NOT completely redesign the reference just to make the colours fit.\n\n10. BRAND MOTIFS\nUse only 2–4 supporting brand motifs maximum.\n\nPossible motifs:\n- world map\n- flight path\n- dot pattern\n- global symbol\n- nursing icon\n- travel landmark\n- abstract accent\n\nIMPORTANT:\nDo NOT automatically include all of these.\n\nDo NOT force:\n- airplane\n- world map\n- landmark\n- handwritten text\n- dots\n- circles\n\nall in the same design.\n\nOnly use motifs that naturally fit the selected reference.\n\n11. TYPOGRAPHY\nUse a strong professional poster hierarchy.\n\nHeadline should feel:\n- bold\n- compact\n- deliberate\n- visually dominant\n\nUse tighter grouping where the reference uses tight typography.\n\nAvoid:\n- overly soft hierarchy\n- excessive line spacing\n- weak headline scale\n- generic centered social-media typography\n\n12. COPY\nUse ONLY the supplied generated copy.\n\nDo not invent:\n- statistics\n- percentages\n- countries\n- dates\n- times\n- venues\n- salaries\n- rankings\n- claims\n- phone numbers\n- labels not present in the supplied copy\n\n13. TOP-LEFT LOGO-SAFE AREA\nDo NOT generate:\n- Study Nursing Abroad logo\n- Jusst Nursing logo\n- any brand wordmark\n\nLeave a seamless clean top-left logo-safe area for later compositing.\n\nThe logo-safe area must NOT look like:\n- a rectangle\n- placeholder\n- patch\n- card\n- separate panel\n- different-colour box\n\n13B. BOTTOM-RIGHT PARTNER-LOGO-SAFE AREA (MUST MATCH BACKGROUND)\nIn addition to the top-left logo-safe area, also reserve a second seamless area in the BOTTOM-RIGHT corner of the canvas (roughly the last third of the width and the last tenth of the height) for a small partner logo and a one-line grey disclaimer that will be composited afterwards.\n\nThis bottom-right area must:\n- Be rendered in the exact same background colour/treatment (${j.background_color || '#FFFFFF'}) as the rest of the canvas background in that region — never a different shade, tint, gradient, or colour block\n- NOT look like a rectangle, placeholder, patch, card, footer bar, or separate panel of any kind\n- Blend seamlessly with whatever naturally occupies that corner (plain background, or a very light continuation of the existing background pattern), exactly as if nothing were reserved there\n- Stay visually calm and low-contrast in that specific corner (avoid dark shapes, bold graphics, or busy patterns there) so the small logo and grey disclaimer text remain legible once composited on top\n- Not duplicate or conflict with the top-left logo-safe area — these are two separate reserved zones, both seamless with the background, one top-left and one bottom-right\n\n14. PHOTOGRAPHY\nWhere the reference uses photography:\n- use authentic professional nurses or nursing students\n- keep the reference's subject scale and crop logic\n- maintain realistic lighting\n- avoid generic stock-photo posing\n- preserve the reference's portrait dominance and placement\n\n15. QUALITY CONTROL\nBefore finalizing, check:\n\n- Does the composition visibly resemble the selected reference?\n- Is the hero subject in a similar relative position?\n- Is the headline positioned similarly?\n- Is the footer/detail area structurally similar?\n- Is the visual density comparable?\n- Are the same categories of graphic elements present?\n- Has the reference's poster energy been preserved?\n- Has unnecessary brand decoration been avoided?\n- Do BOTH reserved logo areas (top-left and bottom-right) blend seamlessly with the background, with no visible box, patch, or colour break?\n\nIf not, revise the composition to fit the selected reference more closely.\n\nFINAL OUTPUT\n\nCreate one polished portrait social-media poster.\n\nThe result must feel like:\nTHE SELECTED REFERENCE COMPOSITION\n+\nSTUDY NURSING ABROAD BRANDING\n+\nNEW SUPPLIED COPY\n\nIt must NOT feel like a generic pre-made social media template.`;\n\nreturn [{\n  json: {\n    ...j,\n    copy_json_text: copyText,\n    edit_prompt: editPrompt\n  }\n}];"
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.selected_reference_id }}"
+        },
+        "options": {
+          "binaryPropertyName": "data"
+        }
+      },
+      "id": "ec2eee20-838b-48d8-8be2-8d8a32b4d4d5",
+      "name": "Download Selected Reference3",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        2720,
+        528
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "",
+          "name": "YOUR_GOOGLEDRIVEOAUTH2API_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "de7466ff-48c1-4822-92bc-70c15438ab40",
+      "name": "Merge Edit Context + Reference3",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        2976,
+        688
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.cometapi.com/v1/images/edits",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_COMETAPI_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "gpt-image-2.5-sunburst"
+            },
+            {
+              "name": "prompt",
+              "value": "={{ $json.edit_prompt }}"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "image[]",
+              "inputDataFieldName": "data"
+            },
+            {
+              "name": "size",
+              "value": "1024x1280"
+            },
+            {
+              "name": "quality",
+              "value": "high"
+            },
+            {
+              "name": "output_format",
+              "value": "png"
+            },
+            {
+              "name": "background",
+              "value": "opaque"
+            },
+            {
+              "name": "n",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 240000
+        }
+      },
+      "id": "3254ea0b-fa28-490b-a2d9-25aaac5164aa",
+      "name": "Comet Image-to-Image3",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        3232,
+        688
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.id }}"
+        },
+        "options": {
+          "binaryPropertyName": "data"
+        }
+      },
+      "id": "61f3669b-b134-4a63-99b2-193cb20e9f74",
+      "name": "Download Reference Image4",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -192,
+        528
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "",
+          "name": "YOUR_GOOGLEDRIVEOAUTH2API_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "resize",
+        "dataPropertyName": "logo_black",
+        "width": 137,
+        "height": 53,
+        "options": {}
+      },
+      "id": "8fbf6db5-3e7a-46cb-8115-feeb84082ee4",
+      "name": "Resize Main Logo2",
+      "type": "n8n-nodes-base.editImage",
+      "typeVersion": 1,
+      "position": [
+        5344,
+        752
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "composite",
+        "dataPropertyNameComposite": "logo_black",
+        "positionX": "=52",
+        "positionY": "=40",
+        "options": {}
+      },
+      "id": "4826e87b-930c-4784-a9b8-7d12feb3d2ed",
+      "name": "Composite Main Logo2",
+      "type": "n8n-nodes-base.editImage",
+      "typeVersion": 1,
+      "position": [
+        5600,
+        752
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "resize",
+        "dataPropertyName": "edusarc_logo",
+        "width": 147,
+        "height": 51,
+        "options": {}
+      },
+      "id": "963f75c9-4bbc-4b9e-94dd-c9c1f8c5d4a1",
+      "name": "Resize EduSarc Logo2",
+      "type": "n8n-nodes-base.editImage",
+      "typeVersion": 1,
+      "position": [
+        5856,
+        752
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "composite",
+        "dataPropertyNameComposite": "edusarc_logo",
+        "positionX": "=809",
+        "positionY": "=1190",
+        "options": {}
+      },
+      "id": "d2f9336f-a2d5-4bba-a367-68d6802077cf",
+      "name": "Composite EduSarc Logo2",
+      "type": "n8n-nodes-base.editImage",
+      "typeVersion": 1,
+      "position": [
+        6112,
+        752
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "resize",
+        "width": 1080,
+        "height": 1350,
+        "options": {}
+      },
+      "id": "27445e7a-80e4-4ff9-976a-9e0b068c4d91",
+      "name": "Resize Final Output2",
+      "type": "n8n-nodes-base.editImage",
+      "typeVersion": 1,
+      "position": [
+        6592,
+        752
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const j = $input.first().json || {};\nconst b64 =\n  j?.data?.[0]?.b64_json ||\n  j?.data?.[0]?.b64 ||\n  j?.b64_json ||\n  '';\n\nif (!b64) {\n  const url = j?.data?.[0]?.url || j?.url || '';\n  if (url) {\n    throw new Error('CometAPI returned an image URL instead of b64_json. Current workflow expects base64. URL: ' + url);\n  }\n  throw new Error('CometAPI did not return data[0].b64_json.');\n}\n\nreturn [{ json: { image_base64: b64, provider: 'CometAPI' } }];"
+      },
+      "id": "2fd5fb4c-b4a7-476c-902c-c38feda1c4bb",
+      "name": "Extract Edited Image3",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3472,
+        1008
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "toBinary",
+        "sourceProperty": "image_base64",
+        "options": {
+          "fileName": "generated-instagram-post.png",
+          "mimeType": "image/png"
+        }
+      },
+      "id": "5a7d68ea-b9d2-4508-b4b6-adf78e4ad1db",
+      "name": "Convert Image to File3",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        4048,
+        752
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const outBinary = {};\nfor (const item of items) {\n  const file = item.binary?.logo;\n  if (!file) continue;\n  const name = (item.json?.name || file.fileName || '').toLowerCase();\n\n  if (name.includes('edusarc')) {\n    outBinary.edusarc_logo = file;\n    continue;\n  }\n\n  if (name.includes('black')) outBinary.logo_black = file;\n  else if (name.includes('pink')) outBinary.logo_pink = file;\n  else if (name.includes('white')) outBinary.logo_white = file;\n}\nif (!outBinary.logo_black) outBinary.logo_black = outBinary.logo_pink || outBinary.logo_white;\nif (!outBinary.logo_black) throw new Error('No usable Study Nursing logo found.');\nif (!outBinary.edusarc_logo) throw new Error('No usable EduSarc logo found.');\nreturn [{ json: {}, binary: outBinary }];"
+      },
+      "id": "206ca7fa-61d9-46e7-96a3-e038cb81aa0c",
+      "name": "Choose Logo3",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4816,
+        912
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "38763df5-2ca3-4628-aa11-5fa85d54cd7c",
+      "name": "Merge Image + Logo3",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        5088,
+        752
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "returnAll": true,
+        "filter": {
+          "folderId": {
+            "__rl": true,
+            "value": "YOUR_LOGOS_FOLDER_ID",
+            "mode": "id"
+          },
+          "whatToSearch": "files"
+        },
+        "options": {}
+      },
+      "id": "1d7d6d97-1c41-4bd2-a6b4-f24297865477",
+      "name": "Find Logo Files2",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        4304,
+        912
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "",
+          "name": "YOUR_GOOGLEDRIVEOAUTH2API_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.id }}"
+        },
+        "options": {
+          "binaryPropertyName": "logo"
+        }
+      },
+      "id": "e9fb2b41-0b6f-4949-a2e9-aef3caf33f9a",
+      "name": "Download Logo Files2",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        4560,
+        912
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "",
+          "name": "YOUR_GOOGLEDRIVEOAUTH2API_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "text": "={{ $json.partner_disclaimer_text || '*EduSarc is our International Education Consultancy and IELTS Provider' }}",
+        "fontSize": 10,
+        "fontColor": "#FFFFFF",
+        "positionX": 629,
+        "positionY": 1259,
+        "options": {}
+      },
+      "id": "31e8d7f4-7488-4d3a-9f8c-7821ad2bd0ea",
+      "name": "Add EduSarc Disclaimer Text2",
+      "type": "n8n-nodes-base.editImage",
+      "typeVersion": 1,
+      "position": [
+        6384,
+        752
+      ]
+    },
+    {
+      "parameters": {
+        "name": "={{ 'instagram-post-' + $now.toFormat('yyyyLLdd-HHmmss') + '.png' }}",
+        "driveId": {
+          "__rl": true,
+          "value": "My Drive",
+          "mode": "list",
+          "cachedResultName": "My Drive",
+          "cachedResultUrl": "https://drive.google.com/drive/my-drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "YOUR_OUTPUT_FOLDER_ID",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "37922b0b-0b2f-415a-9780-ec4deb0dbcb2",
+      "name": "Save Final Image",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        6800,
+        752
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "",
+          "name": "YOUR_GOOGLEDRIVEOAUTH2API_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_CREATIVE_BRIEF_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Creative Brief",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_CREATIVE_BRIEF_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 444897472,
+          "mode": "list",
+          "cachedResultName": "Jusst Nursing ",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_CREATIVE_BRIEF_SHEET_ID/edit#gid=444897472"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Hook": "={{ $('New Content Row Trigger').item.json.Hook }}",
+            "status": "Posted"
+          },
+          "matchingColumns": [
+            "Hook"
+          ],
+          "schema": [
+            {
+              "id": "Day",
+              "displayName": "Day",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Content Angle",
+              "displayName": "Content Angle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Hook",
+              "displayName": "Hook",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Static Post Content",
+              "displayName": "Static Post Content",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "CTA",
+              "displayName": "CTA",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Caption",
+              "displayName": "Caption",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        7040,
+        752
+      ],
+      "id": "72f4eace-d308-404b-9936-a040688f630b",
+      "name": "Update row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "YOUR_GOOGLESHEETSOAUTH2API_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_CREATIVE_BRIEF_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Creative Brief",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_CREATIVE_BRIEF_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 444897472,
+          "mode": "list",
+          "cachedResultName": "Jusst Nursing ",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_CREATIVE_BRIEF_SHEET_ID/edit#gid=444897472"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -1488,
+        688
+      ],
+      "id": "8283921e-11c2-49ae-beae-98e9630e3a8b",
+      "name": "Get row(s) in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "YOUR_GOOGLESHEETSOAUTH2API_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1776,
+        688
+      ],
+      "id": "a67f2852-caca-470e-831b-798884dc0dbb",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.cometapi.com/v1/images/generations",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_COMETAPI_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'gpt-image-2.5-sunburst', prompt: 'Create a hyper-realistic professional sports photograph of a playful golden retriever dog playing football on a beautiful green football field. The dog is actively chasing a black-and-white football, with natural movement, realistic fur, sharp facial details, cinematic natural daylight, realistic shadows, a stadium in the softly blurred background, professional DSLR photography, vibrant natural colors, vertical 4:5 composition, no text, no watermark.', size: '1024x1280', quality: 'high', n: 1, output_format: 'png', background: 'opaque' }) }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "0155eccc-001a-4d50-9910-126851f2dd5c",
+      "name": "Generate Image - CometAPI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1872,
+        1520
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst image = response.data?.[0];\nif (!image) {\n  throw new Error('No image returned from CometAPI: ' + JSON.stringify(response).slice(0, 1000));\n}\nif (image.b64_json) {\n  return [{ json: { status: 'success', revised_prompt: image.revised_prompt || '' }, binary: { image: { data: image.b64_json, mimeType: 'image/png', fileName: 'generated-image.png', fileExtension: 'png' } } }];\n}\nif (image.url) {\n  return [{ json: { status: 'success', image_url: image.url, revised_prompt: image.revised_prompt || '' } }];\n}\nthrow new Error('Unsupported image response: ' + JSON.stringify(response).slice(0, 1000));"
+      },
+      "id": "f7a6755e-2ade-46dd-994d-ee22254ce06f",
+      "name": "Prepare Image Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2224,
+        1264
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const j = $input.first().json || {};\nconst b64 =\n  j?.data?.[0]?.b64_json ||\n  j?.data?.[0]?.b64 ||\n  j?.b64_json ||\n  '';\n\nif (!b64) {\n  const url = j?.data?.[0]?.url || j?.url || '';\n  if (url) {\n    throw new Error('CometAPI returned an image URL instead of b64_json. Current workflow expects base64. URL: ' + url);\n  }\n  throw new Error('CometAPI did not return data[0].b64_json.');\n}\n\nreturn [{ json: { image_base64: b64, provider: 'CometAPI' } }];"
+      },
+      "id": "623fb22f-563b-4042-829c-270b352f40f6",
+      "name": "Extract Edited Image",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2112,
+        1520
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "toBinary",
+        "sourceProperty": "image_base64",
+        "options": {
+          "fileName": "generated-instagram-post.png",
+          "mimeType": "image/png"
+        }
+      },
+      "id": "3dabb5ea-b131-46e8-ad5e-e48136452e34",
+      "name": "Convert Image to File",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        2320,
+        1520
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Pick One Unprocessed Row": {
+      "main": [
+        [
+          {
+            "node": "Normalize Sheet Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Sheet Row": {
+      "main": [
+        [
+          {
+            "node": "List Reference Folder3",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge Form + Reference Library3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Selection + Attach Sheet Copy": {
+      "main": [
+        [
+          {
+            "node": "Build Edit Prompt3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Generated Image + Sheet Context": {
+      "main": [
+        [
+          {
+            "node": "Convert Image to File3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Reference Folder3": {
+      "main": [
+        [
+          {
+            "node": "Filter Reference Images3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Reference Images3": {
+      "main": [
+        [
+          {
+            "node": "Download Reference Image4",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge Reference Metadata + File3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Reference Metadata + File3": {
+      "main": [
+        [
+          {
+            "node": "Analyze Each Reference3",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge Reference + Analysis3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Each Reference3": {
+      "main": [
+        [
+          {
+            "node": "Merge Reference + Analysis3",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Reference + Analysis3": {
+      "main": [
+        [
+          {
+            "node": "Build Reference Library3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Reference Library3": {
+      "main": [
+        [
+          {
+            "node": "Merge Form + Reference Library3",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Form + Reference Library3": {
+      "main": [
+        [
+          {
+            "node": "Prepare Reference Selection3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Reference Selection3": {
+      "main": [
+        [
+          {
+            "node": "Select Best Reference3",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge Context + Selected Reference3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select Best Reference3": {
+      "main": [
+        [
+          {
+            "node": "Merge Context + Selected Reference3",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Context + Selected Reference3": {
+      "main": [
+        [
+          {
+            "node": "Parse Selection + Attach Sheet Copy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Edit Prompt3": {
+      "main": [
+        [
+          {
+            "node": "Download Selected Reference3",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge Edit Context + Reference3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Selected Reference3": {
+      "main": [
+        [
+          {
+            "node": "Merge Edit Context + Reference3",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Edit Context + Reference3": {
+      "main": [
+        [
+          {
+            "node": "Comet Image-to-Image3",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge Generated Image + Sheet Context",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Comet Image-to-Image3": {
+      "main": [
+        [
+          {
+            "node": "Extract Edited Image3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Reference Image4": {
+      "main": [
+        [
+          {
+            "node": "Merge Reference Metadata + File3",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Resize Main Logo2": {
+      "main": [
+        [
+          {
+            "node": "Composite Main Logo2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Composite Main Logo2": {
+      "main": [
+        [
+          {
+            "node": "Resize EduSarc Logo2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resize EduSarc Logo2": {
+      "main": [
+        [
+          {
+            "node": "Composite EduSarc Logo2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Composite EduSarc Logo2": {
+      "main": [
+        [
+          {
+            "node": "Add EduSarc Disclaimer Text2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resize Final Output2": {
+      "main": [
+        [
+          {
+            "node": "Save Final Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Edited Image3": {
+      "main": [
+        [
+          {
+            "node": "Merge Generated Image + Sheet Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert Image to File3": {
+      "main": [
+        [
+          {
+            "node": "Find Logo Files2",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge Image + Logo3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Choose Logo3": {
+      "main": [
+        [
+          {
+            "node": "Merge Image + Logo3",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Image + Logo3": {
+      "main": [
+        [
+          {
+            "node": "Resize Main Logo2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Logo Files2": {
+      "main": [
+        [
+          {
+            "node": "Download Logo Files2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Logo Files2": {
+      "main": [
+        [
+          {
+            "node": "Choose Logo3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add EduSarc Disclaimer Text2": {
+      "main": [
+        [
+          {
+            "node": "Resize Final Output2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Final Image": {
+      "main": [
+        [
+          {
+            "node": "Update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Pick One Unprocessed Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Image - CometAPI": {
+      "main": [
+        [
+          {
+            "node": "Extract Edited Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Edited Image": {
+      "main": [
+        [
+          {
+            "node": "Convert Image to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "nodeGroups": [],
+  "tags": []
+}
